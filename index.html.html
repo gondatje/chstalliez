@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operator Organizer – Single File</title>
+  <style>
+    :root {
+      --bg:#ffffff; --bg2:#f6f7fb; --fg:#0b0b0f; --muted:#555; --border:rgba(0,0,0,.12);
+      --pill-bg:#f1f3f7; --pill-fg:#0b0b0f; --pill-border:rgba(0,0,0,.18);
+      --card-head-bg:rgba(0,0,0,.04);
+    }
+    [data-theme="dark"] {
+      --bg:#0b0b0f; --bg2:#17171c; --fg:#fff; --muted:#b8b8c3; --border:rgba(255,255,255,.2);
+      --pill-bg:rgba(0,0,0,.5); --pill-fg:#fff; --pill-border:rgba(255,255,255,.3);
+      --card-head-bg:rgba(255,255,255,.06);
+    }
+    html, body { height: 100%; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color: var(--fg); background: linear-gradient(to bottom, var(--bg), var(--bg2)); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h1 { font-weight: 600; margin: 0; font-size: clamp(20px, 2.5vw, 28px); }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap: wrap; }
+    .btn { padding: 10px 14px; border-radius: 12px; border:1px solid var(--border); background: var(--card-head-bg); color: var(--fg); font-size: 14px; cursor:pointer; }
+    .btn:hover { filter: brightness(0.95); }
+    .pill { padding: 6px 10px; border-radius: 999px; border:1px solid var(--pill-border); background: var(--pill-bg); color: var(--pill-fg); font-size: 13px; cursor:pointer; }
+    .pill:hover { filter: brightness(0.95); }
+    .pillrow { display:flex; flex-wrap: wrap; gap:8px; }
+    .card { border:1px solid var(--border); border-radius: 16px; overflow:hidden; background: rgba(255,255,255,0.6); }
+    [data-theme="dark"] .card { background: transparent; }
+    .card-head { width:100%; display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; background: var(--card-head-bg); cursor:pointer; }
+    .muted { color: var(--muted); }
+    .table-head, .row { display:grid; grid-template-columns: 1.2fr 0.9fr 1.8fr 0.7fr 1.6fr; gap:10px; }
+    .table-head { padding: 10px 16px; border-bottom:1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity:.8; }
+    .row { padding: 10px 16px; border-bottom:1px solid rgba(0,0,0,0.06); font-size: 14px; }
+    [data-theme="dark"] .row { border-bottom:1px solid rgba(255,255,255,0.08); }
+    .row:last-child { border-bottom:none; }
+    .empty { padding: 16px; color: var(--muted); }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .uploader { border:2px dashed var(--pill-border); padding: 28px; border-radius: 16px; text-align:center; transition: all .2s ease; background: rgba(0,0,0,0.02); }
+    .uploader.hover { background: rgba(0,0,0,0.06); border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,0.15) inset; }
+    [data-theme="dark"] .uploader { background: rgba(255,255,255,0.03); }
+    [data-theme="dark"] .uploader.hover { background: rgba(59,130,246,0.15); }
+    .scroll-mt { scroll-margin-top: 80px; }
+    .rotate { transform: rotate(180deg); transition: transform .15s ease; }
+    .error { border:1px solid rgba(255,0,0,.35); border-radius: 12px; background: rgba(255,0,0,.08); padding: 12px 14px; }
+    .controls { display:flex; gap:12px; align-items:center; }
+    .toggle { display:inline-flex; align-items:center; gap:6px; }
+    .toggle input { width: 44px; height: 24px; accent-color:#111; }
+  </style>
+  <!-- React + ReactDOM (production) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Sheet parser -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+  const { useState, useMemo, useEffect, useRef } = React;
+
+  const INCLUDED_OPERATORS = ["Amber","Brittany","Megan","Sarah","Stephanie","Vanessa","Gabe"]; // include Gabe even if empty
+
+  // THEME -------------------------------------------------------
+  function getInitialTheme(){
+    const saved = localStorage.getItem("oporg-theme");
+    if(saved) return saved;
+    return "light"; // default
+  }
+  function applyTheme(theme){ document.documentElement.setAttribute('data-theme', theme); }
+
+  // PARSER ------------------------------------------------------
+  function parseMonthHeader(text){
+    if(!text) return null;
+    const m = String(text).match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-zA-Z]*\s+\d{1,2}\s+\d{4}/i);
+    if(!m) return null;
+    const s = m[0].replace(/\s{2,}/g, " ");
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function detectHeaderPositions(rows){
+    for(let r=0;r<rows.length;r++){
+      const vals = rows[r].map(v => String(v||'').trim());
+      const upp  = vals.map(v => v.toUpperCase());
+      const want = ["TIME","GUEST","SERVICE","DURATION"];
+      const found = Object.fromEntries(want.filter(w => upp.includes(w)).map(w => [w, upp.indexOf(w)]));
+      if(Object.keys(found).length === want.length){
+        return { rowIndex: r, map: found };
+      }
+    }
+    return null;
+  }
+  const isTimeToken = t => /(\d{1,2}:\d{2})/.test(String(t||''));
+  const firstNameKey = s => String(s||'').trim().split(/\s+/)[0] || '';
+
+  function parseBook4TimeMatrix(rows){
+    const headerInfo = detectHeaderPositions(rows);
+    if(!headerInfo) throw new Error("Could not locate the TIME/GUEST/SERVICE/DURATION header row.");
+    const { rowIndex: hdrRow, map } = headerInfo;
+
+    let currentDate = null;
+    let currentOperator = null;
+    const out = [];
+
+    for(let r=hdrRow+1; r<rows.length; r++){
+      const row = rows[r].map(v => String(v||'').trim());
+      const joined = row.filter(Boolean).join(' ');
+      const dateCandidate = parseMonthHeader(joined);
+      if(dateCandidate){ currentDate = dateCandidate; continue; }
+
+      const timeCell = row[map.TIME] || '';
+      const guestCell = row[map.GUEST] || '';
+      const serviceCell = row[map.SERVICE] || '';
+
+      // Operator header line lives in TIME column without a time token and empty guest/service
+      if(timeCell && !isTimeToken(timeCell) && !guestCell && !serviceCell){
+        currentOperator = timeCell;
+        continue;
+      }
+
+      if(isTimeToken(timeCell) && guestCell && serviceCell && currentDate && currentOperator){
+        const durationCell = row[map.DURATION] || '';
+        const yyyy = currentDate.getFullYear();
+        const mm = String(currentDate.getMonth()+1).padStart(2,'0');
+        const dd = String(currentDate.getDate()).padStart(2,'0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        out.push({
+          operator: currentOperator,
+          operatorKey: firstNameKey(currentOperator),
+          date: dateStr,
+          time: timeCell,
+          service: serviceCell,
+          duration: (String(durationCell).match(/\d+/)||[''])[0],
+          guest: guestCell
+        });
+      }
+    }
+    return out;
+  }
+
+  function groupByOperator(records){
+    const groups = Object.fromEntries(INCLUDED_OPERATORS.map(k => [k, []]));
+    for(const rec of records){
+      const key = (rec.operatorKey||'').toLowerCase();
+      for(const inc of INCLUDED_OPERATORS){
+        if(key === inc.toLowerCase()){
+          groups[inc].push(rec);
+          break;
+        }
+      }
+    }
+    // sort each group by (date,time)
+    for(const k of Object.keys(groups)){
+      groups[k].sort((a,b) => (`${a.date} ${a.time}`).localeCompare(`${b.date} ${b.time}`));
+    }
+    return groups;
+  }
+
+  // UI ---------------------------------------------------------
+  function App(){
+    const [groups, setGroups] = useState(null);
+    const [error, setError] = useState("");
+    const [theme, setTheme] = useState(getInitialTheme());
+    const dropRef = useRef(null);
+
+    useEffect(() => { applyTheme(theme); localStorage.setItem("oporg-theme", theme); }, [theme]);
+
+    useEffect(() => {
+      const dz = dropRef.current;
+      if(!dz) return;
+      const prevent = e => { e.preventDefault(); e.stopPropagation(); };
+      const onDragOver = e => { prevent(e); dz.classList.add('hover'); };
+      const onDragLeave = e => { prevent(e); dz.classList.remove('hover'); };
+      const onDrop = e => {
+        prevent(e); dz.classList.remove('hover');
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(file) handleFile(file);
+      };
+      dz.addEventListener('dragover', onDragOver);
+      dz.addEventListener('dragleave', onDragLeave);
+      dz.addEventListener('drop', onDrop);
+      // page-level prevent to avoid opening the file in the tab
+      window.addEventListener('dragover', prevent);
+      window.addEventListener('drop', prevent);
+      return () => {
+        dz.removeEventListener('dragover', onDragOver);
+        dz.removeEventListener('dragleave', onDragLeave);
+        dz.removeEventListener('drop', onDrop);
+        window.removeEventListener('dragover', prevent);
+        window.removeEventListener('drop', prevent);
+      };
+    }, []);
+
+    function handleFile(file){
+      setError("");
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
+          const recs = parseBook4TimeMatrix(rows);
+          const g = groupByOperator(recs);
+          setGroups(g);
+        } catch (err){
+          console.error(err);
+          setError("I couldn't parse that file. Make sure it's your Book4Time 'Appointment List - By Operator' XLSX export.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function downloadCSV(){
+      if(!groups) return;
+      const rows = [["Operator","Date","Service","Duration","Guest"]];
+      for(const name of INCLUDED_OPERATORS){
+        for(const r of (groups[name]||[])){
+          rows.push([r.operator, r.date, r.service, r.duration, r.guest]);
+        }
+      }
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "operators_filtered.csv"; a.click(); URL.revokeObjectURL(url);
+    }
+
+    return (
+      React.createElement("div", { className:"container" },
+        React.createElement("div", { className:"header" },
+          React.createElement("h1", null, "Operator Organizer (Single File)"),
+          React.createElement("div", { className:"controls" },
+            React.createElement("label", { className:"toggle" },
+              React.createElement("input", { type:"checkbox", checked: theme==='dark', onChange: e => setTheme(e.target.checked ? 'dark' : 'light') }),
+              React.createElement("span", null, theme==='dark' ? 'Dark' : 'Light')
+            ),
+            React.createElement("button", { className:"btn", onClick: downloadCSV, disabled: !groups, title: !groups ? "Upload a spreadsheet first" : "Download filtered CSV" }, "Export CSV"),
+            React.createElement("label", { className:"btn", style:{cursor:"pointer"} }, "Upload XLSX",
+              React.createElement("input", { type:"file", accept:".xlsx,.xls", style:{display:"none"}, onChange: e => e.target.files && e.target.files[0] && handleFile(e.target.files[0]) })
+            )
+          )
+        ),
+        React.createElement("p", { className:"hint" },
+          "Drop in your Book4Time ", React.createElement("strong", null, "Appointment List – By Operator"), " export. The view shows only: ",
+          React.createElement("em", null, "Operator, Date, Service, Duration, Guest"), ". Operators included: ", INCLUDED_OPERATORS.join(", "), ". Gabe is included even if empty."
+        ),
+        !groups && React.createElement("div", { className:"uploader", ref: dropRef },
+          React.createElement("div", { style:{marginBottom:"8px"} }, "Drag & drop XLSX here or click Upload."),
+          React.createElement("div", { className:"muted", style:{fontSize:"12px"} }, "Tip: The parser looks for the row with TIME, GUEST, SERVICE, DURATION.")
+        ),
+        groups && React.createElement(React.Fragment, null,
+          React.createElement("div", { className:"pillrow", style:{margin:"10px 0 18px"} },
+            INCLUDED_OPERATORS.map(name =>
+              React.createElement("button", { key:name, className:"pill", onClick:() => { const el = document.getElementById(`panel-${name}`); if(el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }, `${name} (${(groups[name]||[]).length || 0})`)
+            )
+          ),
+          React.createElement("div", { style:{display:"grid", gap:"14px"} },
+            INCLUDED_OPERATORS.map((name, idx) =>
+              React.createElement(OperatorPanel, { key:name, id:`panel-${name}`, name, items: groups[name]||[], openDefault: idx===0 })
+            )
+          )
+        ),
+        error && React.createElement("div", { className:"error", style:{marginTop:"12px"} }, error)
+      )
+    );
+  }
+
+  function OperatorPanel({ id, name, items, openDefault }){
+    const [open, setOpen] = useState(openDefault || false);
+    return React.createElement("div", { className:"card scroll-mt", id },
+      React.createElement("button", { className:"card-head", onClick:() => setOpen(v => !v) },
+        React.createElement("span", { style:{fontWeight:600}}, `${name} (${items.length})`),
+        React.createElement("span", { className: open ? "rotate":"" }, "▾")
+      ),
+      open && React.createElement("div", null,
+        React.createElement("div", { className:"table-head" },
+          React.createElement("div", null, "Operator"),
+          React.createElement("div", null, "Date"),
+          React.createElement("div", null, "Service"),
+          React.createElement("div", null, "Duration"),
+          React.createElement("div", null, "Guest")
+        ),
+        items.length === 0 ? React.createElement("div", { className:"empty" }, "No data.") :
+        items.map((r, i) => React.createElement(Row, { key:i, r }))
+      )
+    );
+  }
+
+  function Row({ r }){
+    return React.createElement("div", { className:"row" },
+      React.createElement("div", { title:r.operator }, r.operator),
+      React.createElement("div", null, r.date),
+      React.createElement("div", { title:r.service }, r.service),
+      React.createElement("div", null, r.duration),
+      React.createElement("div", { title:r.guest }, r.guest)
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(React.createElement(App));
+  </script>
+</body>
+</html>
