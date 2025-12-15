@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Operator Organizer – Single File</title>
+  <title>Pre Arrival Talliez</title>
   <style>
     :root {
       --bg:#ffffff; --bg2:#f6f7fb; --fg:#0b0b0f; --muted:#555; --border:rgba(0,0,0,.12);
@@ -59,7 +59,9 @@
   <script>
   const { useState, useMemo, useEffect, useRef } = React;
 
-  const INCLUDED_OPERATORS = ["Amber","Brittany","Megan","Sarah","Stephanie","Vanessa","Gabe"]; // include Gabe even if empty
+  const INCLUDED_OPERATORS = ["Amber","Brittany","Megan","Sarah","Stephanie","Vanessa","Kaylee"]; // include Kaylee even if empty
+
+  const LOGO_SRC = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0nMTIwJyBoZWlnaHQ9JzQ4JyB2aWV3Qm94PScwIDAgMTIwIDQ4JyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnPjxzdHlsZT4udHgtezpmb250LWZhbWlseTpTYW5zLVNlcmlmLCdTZWd1ZSBVSScsQXJpYWwsSGVsdmV0aWNhLHN5c3RlbS11aSw6Zm9udC13ZWlnaHQ6NjAwO3RleHQtYW5jaG9yOnN0YXJ0fTwvc3R5bGU+PHRleHQgY2xhc3M9J3R4JyB4PScxMScgeT0nMzYnIGZvbnQtc2l6ZT0nNDAnIGZpbGw9JyMwMDAwMDAnPnRhbGxpZXo8L3RleHQ+PC9zdmc+";
 
   // THEME -------------------------------------------------------
   function getInitialTheme(){
@@ -227,7 +229,10 @@
     return (
       React.createElement("div", { className:"container" },
         React.createElement("div", { className:"header" },
-          React.createElement("h1", null, "Operator Organizer (Single File)"),
+          React.createElement("div", { style:{display:"flex", alignItems:"center", gap:"12px"} },
+            React.createElement("img", { src: LOGO_SRC, alt:"Talliez logo", style:{height:"44px", width:"auto", objectFit:"contain"} }),
+            React.createElement("h1", null, "Pre Arrival Talliez")
+          ),
           React.createElement("div", { className:"controls" },
             React.createElement("label", { className:"toggle" },
               React.createElement("input", { type:"checkbox", checked: theme==='dark', onChange: e => setTheme(e.target.checked ? 'dark' : 'light') }),
@@ -241,7 +246,7 @@
         ),
         React.createElement("p", { className:"hint" },
           "Drop in your Book4Time ", React.createElement("strong", null, "Appointment List – By Operator"), " export. The view shows only: ",
-          React.createElement("em", null, "Operator, Date, Service, Duration, Guest"), ". Operators included: ", INCLUDED_OPERATORS.join(", "), ". Gabe is included even if empty."
+          React.createElement("em", null, "Operator, Date, Service, Duration, Guest"), ". Operators included: ", INCLUDED_OPERATORS.join(", "), ". Kaylee is included even if empty."
         ),
         !groups && React.createElement("div", { className:"uploader", ref: dropRef },
           React.createElement("div", { style:{marginBottom:"8px"} }, "Drag & drop XLSX here or click Upload."),
